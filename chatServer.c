@@ -25,9 +25,9 @@ int main(int argc, char *argv[]) {
 
     signal(SIGINT, intHandler);
 
-    conn_pool_t *pool = malloc(sizeof(conn_pool_t));
+    conn_pool_t *pool = calloc(1,sizeof(conn_pool_t));
     if (pool == NULL) {
-        perror("malloc");
+        perror("calloc");
         exit(EXIT_FAILURE);
     }
     init_pool(pool);
@@ -37,6 +37,7 @@ int main(int argc, char *argv[]) {
 
     if (listen_sd < 0) {
         perror("error making main socket");
+        free(pool);
         return -1;
     }
     int on = 1;
@@ -47,10 +48,12 @@ int main(int argc, char *argv[]) {
 
     if (bind(listen_sd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         perror("error on binding");
+        free(pool);
         return -1;
     }
     if (listen(listen_sd, 5)<0){
         perror("error on listen");
+        free(pool);
         return -1;
     }
     FD_ZERO(&(pool->read_set));
@@ -108,11 +111,9 @@ int main(int argc, char *argv[]) {
     } while (end_server == 0);
 
     while (pool->nr_conns > 0) {
-
         remove_conn(pool->conn_head->fd, pool);
-
     }
-
+    close(listen_sd);
     free(pool);
 
     return 0;
@@ -132,9 +133,9 @@ int add_conn(int sd, conn_pool_t *pool) {
      * 2. add connection to pool
      * */
     if (pool->conn_head == NULL) {
-        pool->conn_head = (conn_t *) malloc(sizeof(conn_t));
+        pool->conn_head = (conn_t *) calloc(1,sizeof(conn_t));
         if (pool->conn_head == NULL) {
-            printf("error malloc");
+            printf("error calloc");
             return -1;
         }
         pool->nr_conns++;
@@ -150,7 +151,7 @@ int add_conn(int sd, conn_pool_t *pool) {
             prevConn = currConn;
         }
 
-        currConn = (conn_t *) malloc(sizeof(conn_t));
+        currConn = (conn_t *) calloc(1,sizeof(conn_t));
         if (currConn == NULL) {
             return -1;
         }
@@ -182,38 +183,38 @@ int remove_conn(int sd, conn_pool_t *pool) {
     */
     conn_t *currConn, *prevConn;
     for (currConn = pool->conn_head; currConn != NULL; currConn = currConn->next) {
-        if (sd == currConn->fd) {
-            prevConn = currConn->prev;
-            if (currConn->next != NULL && currConn->prev != NULL) {
-
-                currConn->next->prev = prevConn;
-                prevConn->next = currConn->next;
-            } else if (currConn->next == NULL && currConn->prev != NULL) {
-                prevConn->next = NULL;
-            } else if (currConn->prev == NULL && currConn->next != NULL) {
-
-                currConn->next->prev = NULL;
-                pool->conn_head = currConn->next;
-            } else {
-
-                pool->conn_head = NULL;
-            }
-            if (currConn->write_msg_head != NULL) {
-                for (msg_t *currMsg = currConn->write_msg_head; currMsg != NULL; currMsg = currMsg->next) {
-                    if (currMsg->prev != NULL) {
-                        free(currMsg->prev);
-                    }
-                    if (currMsg->message != NULL) {
-                        free(currMsg->message);
-                    }
-                    if (currMsg->next == NULL) {
-                        free(currMsg);
-                        break;
-                    }
+        if (currConn->fd == sd) {
+            break;
+        }
+    }
+        prevConn = currConn->prev;
+        if (currConn->next != NULL && currConn->prev != NULL) {
+            currConn->next->prev = prevConn;
+            prevConn->next = currConn->next;
+        } else if (currConn->next == NULL && currConn->prev != NULL) {
+            prevConn->next = NULL;
+        } else if (currConn->prev == NULL && currConn->next != NULL) {
+            currConn->next->prev = NULL;
+            pool->conn_head = currConn->next;
+        } else {
+            pool->conn_head = NULL;
+        }
+        if (currConn->write_msg_head != NULL) {
+            for (msg_t *currMsg = currConn->write_msg_head; currMsg != NULL; currMsg = currMsg->next) {
+                if (currMsg->prev != NULL) {
+                    free(currMsg->prev);
+                }
+                if (currMsg->message != NULL) {
+                    free(currMsg->message);
+                }
+                if (currMsg->next == NULL) {
+                    free(currMsg);
+                    break;
                 }
             }
         }
-    }
+
+
     FD_CLR(sd, &(pool->read_set));
     FD_CLR(sd, &(pool->write_set));
     FD_CLR(sd, &(pool->ready_read_set));
@@ -248,11 +249,11 @@ int add_msg(int sd, char *buffer, int len, conn_pool_t *pool) {
     for (currConn = pool->conn_head; currConn != NULL; currConn = currConn->next) {
         if (currConn->fd != sd) {
             FD_SET(currConn->fd, &(pool->write_set));
-            msg_t *currMsg = (msg_t *) malloc(sizeof(msg_t));
+            msg_t *currMsg = (msg_t *) calloc(1,sizeof(msg_t));
             currMsg->prev = currConn->write_msg_tail;
             currMsg->next = NULL;
-            currMsg->message = (char *) malloc((len + 1));
-            strcpy(currMsg->message, buffer);
+            currMsg->message = calloc((len + 1), sizeof(char));
+            strncpy(currMsg->message, buffer, len);
             currMsg->message[len] = '\0';
             currMsg->size = len;
             currConn->write_msg_tail = currMsg;
