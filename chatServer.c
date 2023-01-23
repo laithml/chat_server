@@ -203,12 +203,15 @@ int remove_conn(int sd, conn_pool_t *pool) {
             for (msg_t *currMsg = currConn->write_msg_head; currMsg != NULL; currMsg = currMsg->next) {
                 if (currMsg->prev != NULL) {
                     free(currMsg->prev);
+                    currMsg->prev = NULL;
                 }
                 if (currMsg->message != NULL) {
                     free(currMsg->message);
+                    currMsg->message = NULL;
                 }
                 if (currMsg->next == NULL) {
                     free(currMsg);
+                    currMsg = NULL;
                     break;
                 }
             }
@@ -234,6 +237,7 @@ int remove_conn(int sd, conn_pool_t *pool) {
     printf("removing connection with sd %d \n", sd);
     close(sd);
     free(currConn);
+    currConn = NULL;
     return 0;
 }
 
@@ -286,14 +290,17 @@ int write_to_client(int sd, conn_pool_t *pool) {
 
         if (currMsg->prev != NULL) {
             free(currMsg->prev);
+            currMsg->prev = NULL;
         }
         if (write(currCon->fd, currMsg->message, currMsg->size) < 0) {
             return -1;
         }
         free(currMsg->message);
+        currMsg->message = NULL;
 
         if (currMsg->next == NULL) {
             free(currMsg);
+            currMsg = NULL;
             break;
         }
     }
